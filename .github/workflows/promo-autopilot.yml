@@ -1,0 +1,37 @@
+name: Promotion autopilot
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview only?'
+        default: 'true'
+        type: boolean
+  schedule:
+    - cron: '17 6 * * 1,3,5'
+permissions:
+  contents: write
+concurrency:
+  group: promotion-autopilot
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run publisher
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PROMO_DRY_RUN: ${{ inputs.dry_run || '0' }}
+        run: python promo/publish.py
+      - name: Commit publication state
+        run: |
+          if git diff --quiet -- promo/state.json; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add promo/state.json
+          git commit -m "Record published promo post"
+          git push
